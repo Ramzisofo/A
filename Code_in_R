@@ -1,0 +1,13 @@
+raw_data <- data.frame(raw_data$`Date - Heure`, raw_data$`Consommation (MW)`) # Selecting the columns that we will use 
+
+names(raw_data) <- c("date_obj", "consom") # Naming the selected columns
+raw_data <- raw_data[order(raw_data$date_obj),]   # Ordering the time series chronologically 
+
+print(head(raw_data))
+
+ind <- c()
+for (i in seq(1, length(raw_data$date_obj)-1)){
+  if (as.numeric(raw_data$date_obj[i+1]-raw_data$date_obj[i])!=15)
+    ind <- c(ind, i)                                           # Checking that the time step is uniform 
+}
+print(ind)
