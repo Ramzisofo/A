@@ -11,3 +11,66 @@ for (i in seq(1, length(raw_data$date_obj)-1)){
     ind <- c(ind, i)                                           # Checking that the time step is uniform 
 }
 print(ind)
+
+indexes_NA_consom <- which(is.na(raw_data$consom))   
+# An array containing the indexes corresponding to the rows with missing values
+
+data <- filter(raw_data, !is.na(raw_data$consom))  
+# Removing the rows with missing values
+
+
+N_train = length(data$consom)-100 # Size of the dataset
+data_train <- data[1:N_train,]
+data_test <- data[(N_train+1):(N_train+100),]
+# Separating the data into training set and test set
+
+
+trend_compo <- loess(data_train$consom ~ seq(1, length(data_train$date_obj)), data_train, degree = 2, span = 0.2)
+# Estimating the tendency using local polynomial regression
+
+plot(data_train$date_obj[1:3000], data_train$consom[1:3000], type = "l", xlab = "",
+ylab = "Ind. Prix. Conso. Ménages (INSEE)", col = "blue")
+lines(data_train$date_obj[1:3000], trend_compo$fitted[1:3000], col = "orangered2", lwd = 2)
+# Plotting the result of the estimation
+
+detrend_data <- data_train$consom - trend_compo$fitted
+# Removing the trend component of the data
+
+w1 <- 2*pi/(4*24)       
+w2 <- 2*pi/(4*24*7)
+# Initializing the frequencies 
+
+time <- seq(1,length(data_train$date_obj)) 
+fourier_basis <- data.frame(cos(w1*time), sin(w1*time), cos(w2*time), sin(w2*time) )
+names(fourier_basis) <- c("x_week 1", "y_week 1", "x_day 1", "y_day 1")
+
+for (k in seq(2, 10)) {        # Building the Fourier harmonics to be used
+  fourier_basis[paste("x_week", as.character(k))] <- cos(w1*k*time)
+  fourier_basis[paste("y_week", as.character(k))] <- sin(w1*k*time)
+  fourier_basis[paste("x_day", as.character(k))] <- cos(w2*k*time)
+  fourier_basis[paste("y_day", as.character(k))] <- sin(w2*k*time)
+}
+
+season_compo <- lm(detrend_data[time] ~ ., data = fourier_basis)
+# Estimating the seasonal component
+
+plot(data_train$date_obj[1:1000], detrend_data[1:1000], type = "l", xlab = "",
+ylab = "Electric consumption (MW)", col = "blue")
+lines(data_train$date_obj[time2], season_compo$fitted[1:max_], col = "orangered2", lwd = 2)
+# Plotting the estimation result
+
+residual <- detrend_data - season_compo$fitted.values 
+# Deseasoning the Time Series
+
+Residuals <- zoo(residual[1:3000], data_train$date_obj[1:3000]) 
+
+plot(Residuals)
+
+
+acf(residual)
+pacf(residual)
+# Plotting the auto-correlation and partial auto-correlation functions 
+# which allow us to choose the right number of parameters
+
+residual_model = arima(residual, order = c(5,0,10), method = c("CSS-ML", "ML", "CSS"),
+                       SSinit = c("Gardner1980", "Rossignol2011"),optim.method = "BFGS",include.mean = F)
